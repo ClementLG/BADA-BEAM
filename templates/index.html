@@ -70,6 +70,9 @@ License: GNU GPLv3
             <button class="btn btn--secondary" id="btn-export-obj" title="Export OBJ 3D model">
                 📦 OBJ
             </button>
+            <button class="btn btn--danger" id="btn-reset-all" title="Reset entire application">
+                ↻ Reset All
+            </button>
         </div>
     </header>
 
@@ -451,6 +454,13 @@ License: GNU GPLv3
             // ── Export buttons ─────────────────────────────────────────────────────
             qs("#btn-export-png").addEventListener("click", () => viewer.exportPNG());
             qs("#btn-export-obj").addEventListener("click", () => viewer.exportOBJ());
+
+            // ── Global Reset ───────────────────────────────────────────────────────
+            qs("#btn-reset-all").addEventListener("click", () => {
+                if (confirm("Are you sure you want to completely reset the application? Any unsaved work will be lost.")) {
+                    window.location.reload();
+                }
+            });
 
             // ── Viewer options ─────────────────────────────────────────────────────
             qs("#chk-axes").addEventListener("change", (e) => {
