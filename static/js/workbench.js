@@ -424,6 +424,7 @@ class PlaneContext {
      */
     constructor(canvas, ctx, color) {
         this.canvas = canvas;
+        this.ctx = ctx;
         this.imageLoader = new ImageLoader(canvas);
         this.calibration = new Calibration(ctx);
         this.tracer = new Tracer(ctx, this.calibration, color);
@@ -493,6 +494,73 @@ class PlaneContext {
     /** Clear all traced points. */
     clearTrace() {
         this.tracer.clear();
+    }
+
+    /**
+     * Automatically trace the curve by finding pixels that match the target colour.
+     * @param {string} hexColor - e.g. "#ff0000"
+     */
+    autoTrace(hexColor) {
+        if (!this.calibration.isDone) {
+            throw new Error("Calibrate the grid before auto-tracing.");
+        }
+        if (!this.imageLoader.hasImage) return;
+
+        // Parse target color
+        const targetR = parseInt(hexColor.slice(1, 3), 16);
+        const targetG = parseInt(hexColor.slice(3, 5), 16);
+        const targetB = parseInt(hexColor.slice(5, 7), 16);
+
+        // Get image data from canvas (ensure no overlays are drawn when calling this!)
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const imgData = this.ctx.getImageData(0, 0, w, h);
+        const data = imgData.data;
+
+        const thresh = 60; // RGB distance threshold
+        const angleMap = new Map();
+        const cal = this.calibration;
+
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const i = (y * w + x) * 4;
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                const a = data[i + 3];
+
+                if (a < 128) continue; // skip transparent
+
+                // Colour distance
+                const dist = Math.sqrt((r - targetR) ** 2 + (g - targetG) ** 2 + (b - targetB) ** 2);
+                if (dist < thresh) {
+                    const { angleDeg, gainDB } = cal.canvasToPolar({ x, y });
+
+                    if (gainDB < cal.minGainDB - 10) continue; // way outside chart bounds
+
+                    const angleInt = Math.round(angleDeg) % 360;
+
+                    if (!angleMap.has(angleInt)) {
+                        angleMap.set(angleInt, { x, y, angleDeg, gainDB });
+                    } else {
+                        // Keep the outermost point (highest gain)
+                        const existing = angleMap.get(angleInt);
+                        if (gainDB > existing.gainDB) {
+                            angleMap.set(angleInt, { x, y, angleDeg, gainDB });
+                        }
+                    }
+                }
+            }
+        }
+
+        const newPoints = Array.from(angleMap.values());
+        if (newPoints.length === 0) {
+            throw new Error("No matching colour found on the chart.");
+        }
+
+        newPoints.sort((a, b) => a.angleDeg - b.angleDeg);
+        this.tracer.points = newPoints;
+        this.mode = "tracing";
     }
 
     /**
@@ -604,6 +672,10 @@ class Workbench {
         this.canvas.addEventListener("click", (e) => {
             this._handleCanvasClick(getCanvasMousePos(this.canvas, e));
         });
+
+        // Auto-trace buttons
+        ui.btnAutoTraceAz.addEventListener("click", () => this._autoTracePlane("az"));
+        ui.btnAutoTraceEl.addEventListener("click", () => this._autoTracePlane("el"));
 
         // Save / undo / clear buttons – azimuth
         ui.btnSaveAz.addEventListener("click", () => this._savePlane("az"));
@@ -725,6 +797,38 @@ class Workbench {
         ctx.clearTrace();
         ctx.redrawAll();
         this._updatePlaneCounts();
+    }
+
+    /**
+     * Auto-trace the specified plane using the selected colour.
+     * @param {"az"|"el"} plane
+     * @private
+     */
+    _autoTracePlane(plane) {
+        const ctx = this.planes[plane];
+        if (ctx.mode !== "tracing" && ctx.mode !== "calibrating") return;
+
+        if (!ctx.calibration.isDone) {
+            showToast("Complete calibration before auto-tracing.", "warning");
+            return;
+        }
+
+        const colorInput = plane === "az" ? this.ui.colorAz : this.ui.colorEl;
+        const hexColor = colorInput.value;
+
+        // Ensure canvas only contains the base image for clean pixel scanning
+        ctx.imageLoader.redraw();
+
+        try {
+            ctx.autoTrace(hexColor);
+            ctx.redrawAll();
+            this._updatePlaneCounts();
+            this._updateModeIndicator();
+            showToast(`Auto-traced ${ctx.tracer.count} points.`, "success");
+        } catch (err) {
+            ctx.redrawAll();
+            showToast(err.message, "error");
+        }
     }
 
     // -----------------------------------------------------------------------

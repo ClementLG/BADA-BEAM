@@ -125,6 +125,14 @@ License: MIT
                     <!-- 3 · Trace & save -->
                     <div class="tab-section">
                         <div class="tab-section__label">✏ 3 · Trace &amp; save</div>
+                        <div class="auto-trace-row"
+                            style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center;">
+                            <input type="color" id="color-az" value="#ff0000"
+                                style="width: 32px; height: 32px; padding: 0; border: none; border-radius: 4px; cursor: pointer;"
+                                title="Select trace colour" />
+                            <button class="btn btn--secondary" id="btn-autotrace-az" style="flex: 1;">🪄
+                                Auto-Trace</button>
+                        </div>
                         <div class="plane-status">
                             <span class="plane-status__label" id="count-az">0 pts traced</span>
                         </div>
@@ -178,6 +186,14 @@ License: MIT
                     <!-- 3 · Trace & save -->
                     <div class="tab-section">
                         <div class="tab-section__label">✏ 3 · Trace &amp; save</div>
+                        <div class="auto-trace-row"
+                            style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center;">
+                            <input type="color" id="color-el" value="#ff0000"
+                                style="width: 32px; height: 32px; padding: 0; border: none; border-radius: 4px; cursor: pointer;"
+                                title="Select trace colour" />
+                            <button class="btn btn--secondary" id="btn-autotrace-el" style="flex: 1;">🪄
+                                Auto-Trace</button>
+                        </div>
                         <div class="plane-status">
                             <span class="plane-status__label" id="count-el">0 pts traced</span>
                         </div>
@@ -349,6 +365,8 @@ License: MIT
                     az: document.querySelectorAll("#tab-az .cal-step"),
                     el: document.querySelectorAll("#tab-el .cal-step"),
                 },
+                colorAz: qs("#color-az"),
+                btnAutoTraceAz: qs("#btn-autotrace-az"),
                 countAz: qs("#count-az"),
                 btnSaveAz: qs("#btn-save-az"),
                 btnUndoAz: qs("#btn-undo-az"),
@@ -360,6 +378,8 @@ License: MIT
                 fileInputEl: qs("#file-input-el"),
                 uploadLabelEl: qs("#upload-label-el"),
                 uploadTextEl: qs("#upload-text-el"),
+                colorEl: qs("#color-el"),
+                btnAutoTraceEl: qs("#btn-autotrace-el"),
                 countEl: qs("#count-el"),
                 btnSaveEl: qs("#btn-save-el"),
                 btnUndoEl: qs("#btn-undo-el"),
