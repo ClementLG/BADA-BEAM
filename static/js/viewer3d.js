@@ -378,6 +378,18 @@ class Viewer3D {
      */
     async generate(azimuthData, elevationData) {
         this._showSpinner(true);
+        const progressEl = this.spinner.querySelector("#spinner-progress");
+        if (progressEl) progressEl.textContent = "(0%)";
+
+        let fakeProgress = 0;
+        const progressInterval = setInterval(() => {
+            if (fakeProgress < 95) {
+                // Slower increment as we approach 95%
+                const increment = Math.max(1, Math.floor((95 - fakeProgress) * 0.05));
+                fakeProgress += increment;
+                if (progressEl) progressEl.textContent = `(${fakeProgress}%)`;
+            }
+        }, 400);
 
         try {
             const response = await fetch(BB_CONSTANTS.ENDPOINT_GENERATE, {
@@ -386,20 +398,64 @@ class Viewer3D {
                 body: JSON.stringify({ azimuth: azimuthData, elevation: elevationData }),
             });
 
+            clearInterval(progressInterval);
+
             if (!response.ok) {
                 const err = await response.json().catch(() => ({}));
                 throw new Error(err.error || `Server error ${response.status}`);
             }
 
-            const payload = await response.json();
+            // Stream response to show actual download progress if possible
+            const contentLength = response.headers.get("content-length");
+            const total = contentLength ? parseInt(contentLength, 10) : 0;
+            let loaded = 0;
+
+            const reader = response.body.getReader();
+            const chunks = [];
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                if (value) {
+                    chunks.push(value);
+                    loaded += value.length;
+
+                    if (progressEl) {
+                        if (total > 0) {
+                            // Scale remaining 95->100% or just jump correctly
+                            const realPercent = Math.round((loaded / total) * 100);
+                            progressEl.textContent = `(${Math.max(fakeProgress, realPercent)}%)`;
+                        } else {
+                            progressEl.textContent = `(${Math.round(loaded / 1024)} KB)`;
+                        }
+                    }
+                }
+            }
+
+            // Combine chunks into a single Uint8Array
+            const allChunks = new Uint8Array(loaded);
+            let position = 0;
+            for (const chunk of chunks) {
+                allChunks.set(chunk, position);
+                position += chunk.length;
+            }
+
+            // Parse JSON
+            if (progressEl) progressEl.textContent = "(100%)";
+            const text = new TextDecoder("utf-8").decode(allChunks);
+            const payload = JSON.parse(text);
+
             this._renderPayload(payload);
             showToast("3-D model generated!", "success");
 
         } catch (err) {
+            clearInterval(progressInterval);
             showToast(`Generation failed: ${err.message}`, "error");
             console.error("[Viewer3D.generate]", err);
         } finally {
             this._showSpinner(false);
+            if (progressEl) progressEl.textContent = "";
         }
     }
 

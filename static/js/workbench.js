@@ -3,10 +3,14 @@
  * workbench.js — Bada-Beam
  * =============================================================================
  * 2-D tracing workbench.  Manages the HTML5 Canvas used to:
- *   1. Display the uploaded antenna polar-chart image.
- *   2. Let the user calibrate the polar grid (centre, 0 dB ring, angle-0).
+ *   1. Display the uploaded antenna polar-chart image (per-plane).
+ *   2. Let the user calibrate the polar grid (centre, 0 dB ring, main lobe).
  *   3. Trace the Azimuth and Elevation curves by clicking control points.
  *   4. Export the traced curves as [angle_deg, gain_dB] arrays for the backend.
+ *
+ * Architecture: each plane (az / el) owns a PlaneContext that bundles its own
+ * ImageLoader + Calibration + Tracer.  Switching the active plane tab simply
+ * swaps the active PlaneContext and redraws the canvas with that plane's data.
  *
  * Dependencies (must be loaded before this script):
  *   - constants.js  (BB_CONSTANTS)
@@ -93,7 +97,12 @@ class ImageLoader {
  * 3-step click-based calibration of the polar grid:
  *   Step 1 — Centre point of the chart.
  *   Step 2 — Any point on the outer (0 dB) ring → defines the scale radius.
- *   Step 3 — The 0° reference direction (e.g. top of the chart).
+ *   Step 3 — The main lobe direction (= 0° reference).
+ *
+ * The "main lobe direction" concept: the user clicks the point on the outer
+ * ring that corresponds to the highest-gain direction.  Internally this stores
+ * an angle offset (angleOffset) used to convert canvas px → polar angle.
+ * The label "0°" is conventional — it means "the angle we call zero".
  * =========================================================================== */
 
 class Calibration {
@@ -112,7 +121,7 @@ class Calibration {
         this.center = null;
         /** @type {number|null} Radius of the 0 dB ring in pixels. */
         this.ringRadius = null;
-        /** @type {number|null} Angle offset so that the 0° direction aligns (rad). */
+        /** @type {number|null} Angle offset so that the main lobe aligns to 0° (rad). */
         this.angleOffset = null;
         /** @type {number} Minimum displayed gain (dB) — default −40 dB. */
         this.minGainDB = -40;
@@ -143,9 +152,8 @@ class Calibration {
         } else if (this.step === 3) {
             const dx = pos.x - this.center.x;
             const dy = pos.y - this.center.y;
-            // Canvas Y-axis is inverted; angle-0 is "up" (−π/2 in Math atan2)
             this.angleOffset = Math.atan2(dy, dx);
-            this._drawAngleReference(pos);
+            this._drawMainLobeReference(pos);
             this.step = 4;
         }
     }
@@ -167,7 +175,7 @@ class Calibration {
         const normalised = r / this.ringRadius;
         const gainDB = this.minGainDB + normalised * (0 - this.minGainDB);
 
-        // Angle relative to the calibrated 0° direction
+        // Angle relative to the calibrated 0° direction (= main lobe)
         let angle = Math.atan2(dy, dx) - this.angleOffset;
         let angleDeg = radToDeg(angle);
 
@@ -230,26 +238,58 @@ class Calibration {
     }
 
     /**
-     * Draw a line from the centre to the angle-0 reference point.
+     * Draw an arrow from the centre to the main lobe reference direction,
+     * labelled "0° / Peak" so the user understands what was registered.
      * @param {{x:number,y:number}} pos
      * @private
      */
-    _drawAngleReference(pos) {
+    _drawMainLobeReference(pos) {
         const ctx = this.ctx;
+        const cx = this.center.x;
+        const cy = this.center.y;
+
         ctx.save();
+
+        // Dashed line from centre to peak click
         ctx.strokeStyle = BB_CONSTANTS.COLOR_CAL;
         ctx.lineWidth = 1.5;
         ctx.setLineDash([6, 3]);
         ctx.beginPath();
-        ctx.moveTo(this.center.x, this.center.y);
+        ctx.moveTo(cx, cy);
         ctx.lineTo(pos.x, pos.y);
         ctx.stroke();
-
         ctx.setLineDash([]);
+
+        // Arrowhead
+        const angle = Math.atan2(pos.y - cy, pos.x - cx);
+        const headLen = 10;
         ctx.fillStyle = BB_CONSTANTS.COLOR_CAL;
+        ctx.beginPath();
+        ctx.moveTo(pos.x, pos.y);
+        ctx.lineTo(
+            pos.x - headLen * Math.cos(angle - Math.PI / 6),
+            pos.y - headLen * Math.sin(angle - Math.PI / 6),
+        );
+        ctx.lineTo(
+            pos.x - headLen * Math.cos(angle + Math.PI / 6),
+            pos.y - headLen * Math.sin(angle + Math.PI / 6),
+        );
+        ctx.closePath();
+        ctx.fill();
+
+        // Label "0° / Peak"
+        ctx.font = "bold 11px JetBrains Mono, monospace";
+        ctx.fillStyle = BB_CONSTANTS.COLOR_CAL;
+        ctx.textAlign = "center";
+        const labelX = pos.x + 14 * Math.cos(angle);
+        const labelY = pos.y + 14 * Math.sin(angle) - 6;
+        ctx.fillText("0°", labelX, labelY);
+
+        // Dot at click position
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
         ctx.fill();
+
         ctx.restore();
     }
 }
@@ -298,7 +338,6 @@ class Tracer {
     undo() {
         if (this.points.length > 0) {
             this.points.pop();
-            // Caller must trigger full canvas redraw (image + cal + this trace)
         }
     }
 
@@ -371,115 +410,167 @@ class Tracer {
 
 
 /* =============================================================================
- * PlaneManager
+ * PlaneContext
  * ===========================================================================
- * Coordinates the two Tracer instances (Azimuth + Elevation) and manages
- * the "Save Azimuth" / "Save Elevation" workflow.
+ * Bundles together all per-plane state: image, calibration, tracer, and saved
+ * data.  Each plane (azimuth / elevation) owns one PlaneContext instance.
  * =========================================================================== */
 
-class PlaneManager {
+class PlaneContext {
     /**
-     * @param {Tracer} azTracer  - Tracer for the azimuth plane.
-     * @param {Tracer} elTracer  - Tracer for the elevation plane.
+     * @param {HTMLCanvasElement}       canvas  - Shared workbench canvas.
+     * @param {CanvasRenderingContext2D} ctx    - Shared rendering context.
+     * @param {string}                  color   - Trace colour for this plane.
      */
-    constructor(azTracer, elTracer) {
-        /** @type {Tracer} */
-        this.azTracer = azTracer;
-        /** @type {Tracer} */
-        this.elTracer = elTracer;
-        /** @type {[number,number][]|null} Saved azimuth data, or null. */
-        this.azimuthData = null;
-        /** @type {[number,number][]|null} Saved elevation data, or null. */
-        this.elevationData = null;
-        /** @type {"az"|"el"} Currently active tracing plane. */
-        this.activePlane = "az";
+    constructor(canvas, ctx, color) {
+        this.canvas = canvas;
+        this.imageLoader = new ImageLoader(canvas);
+        this.calibration = new Calibration(ctx);
+        this.tracer = new Tracer(ctx, this.calibration, color);
+
+        /** @type {[number,number][]|null} Finalized polar data after save. */
+        this.savedData = null;
+
+        /** @type {"idle"|"calibrating"|"tracing"} */
+        this.mode = "idle";
     }
 
-    /** Returns the Tracer for the currently active plane. */
-    get activeTracer() {
-        return this.activePlane === "az" ? this.azTracer : this.elTracer;
+    /** Whether this plane has a saved dataset ready for generation. */
+    get isSaved() { return this.savedData !== null; }
+
+    /**
+     * Load a new image file into this plane context and start calibration.
+     * @param {File} file
+     * @returns {Promise<void>}
+     */
+    async loadImage(file) {
+        await this.imageLoader.load(file);
+        // Reset calibration and trace when a new image is loaded
+        this.calibration._reset();
+        this.tracer.clear();
+        this.savedData = null;
+        this.mode = "calibrating";
     }
 
     /**
-     * Switch the active tracing plane.
-     * @param {"az"|"el"} plane
+     * Handle a canvas click given the current mode of this context.
+     * @param {{x:number,y:number}} pos
+     * @returns {"calibrating"|"calibration-done"|"traced"} What happened.
      */
-    setActivePlane(plane) {
-        if (plane !== "az" && plane !== "el") {
-            throw new Error(`Unknown plane: "${plane}". Must be "az" or "el".`);
+    handleClick(pos) {
+        if (this.mode === "calibrating") {
+            this.calibration.registerClick(pos);
+            if (this.calibration.isDone) {
+                this.mode = "tracing";
+                return "calibration-done";
+            }
+            return "calibrating";
         }
-        this.activePlane = plane;
+        if (this.mode === "tracing") {
+            this.tracer.addPoint(pos);
+            return "traced";
+        }
+        return null;
     }
 
     /**
-     * Save the current trace of the active plane and reset the tracer.
-     * @returns {{ plane: string, count: number }} Info about what was saved.
+     * Attempt to save the current trace as the finalized plane data.
+     * @throws {Error} If fewer than 3 points are traced.
      */
-    saveActivePlane() {
-        const data = this.activeTracer.exportData();
-        const plane = this.activePlane;
-
+    save() {
+        const data = this.tracer.exportData();
         if (data.length < 3) {
             throw new Error("At least 3 control points are required to save a plane.");
         }
-
-        if (plane === "az") {
-            this.azimuthData = data;
-        } else {
-            this.elevationData = data;
-        }
-
-        return { plane, count: data.length };
+        this.savedData = data;
     }
 
-    /** Whether both planes have been saved. */
-    get isComplete() {
-        return this.azimuthData !== null && this.elevationData !== null;
+    /** Undo the last traced point. */
+    undo() {
+        this.tracer.undo();
+    }
+
+    /** Clear all traced points. */
+    clearTrace() {
+        this.tracer.clear();
+    }
+
+    /**
+     * Full redraw: background image then trace overlay.
+     * Must be called when switching to this plane so the canvas shows its data.
+     */
+    redrawAll() {
+        this.imageLoader.redraw();
+        this.tracer.redraw();
     }
 }
 
 
 /* =============================================================================
- * Workbench  (top-level facade)
+ * Workbench  (top-level façade)
  * ===========================================================================
- * Wires all the above classes together and binds to the HTML elements.
+ * Wires all the above classes together.  Maintains two PlaneContext instances
+ * (az / el) and routes canvas clicks + button actions to the active one.
  * =========================================================================== */
 
 class Workbench {
     /**
-     * @param {HTMLCanvasElement}     canvas          - 2-D workbench canvas.
-     * @param {Object}                uiElements      - Object of key HTML element refs.
-     * @param {HTMLButtonElement}     uiElements.btnSaveAz
-     * @param {HTMLButtonElement}     uiElements.btnSaveEl
-     * @param {HTMLButtonElement}     uiElements.btnUndo
-     * @param {HTMLButtonElement}     uiElements.btnClearTrace
-     * @param {HTMLInputElement}      uiElements.fileInput
-     * @param {HTMLElement}           uiElements.dropZone
-     * @param {HTMLElement}           uiElements.modeIndicator
-     * @param {HTMLElement}           uiElements.calStepEls   - NodeList of step indicators.
-     * @param {HTMLElement}           uiElements.planeAzCount
-     * @param {HTMLElement}           uiElements.planeElCount
-     * @param {HTMLElement}           uiElements.planeAzDot
-     * @param {HTMLElement}           uiElements.planeElDot
-     * @param {HTMLInputElement}      uiElements.minGainInput
-     * @param {Function}              uiElements.onPlaneToggle - Callback when plane is switched.
+     * @param {HTMLCanvasElement} canvas         - 2-D workbench canvas.
+     * @param {Object}            uiElements     - HTML element refs (see below).
      */
     constructor(canvas, uiElements) {
         this.canvas = canvas;
         this.ctx = canvas.getContext("2d");
         this.ui = uiElements;
 
-        // Sub-components
-        this.imageLoader = new ImageLoader(canvas);
-        this.calibration = new Calibration(this.ctx);
-        this.azTracer = new Tracer(this.ctx, this.calibration, BB_CONSTANTS.COLOR_AZ);
-        this.elTracer = new Tracer(this.ctx, this.calibration, BB_CONSTANTS.COLOR_EL);
-        this.planeManager = new PlaneManager(this.azTracer, this.elTracer);
+        // One PlaneContext per plane
+        this.planes = {
+            az: new PlaneContext(canvas, this.ctx, BB_CONSTANTS.COLOR_AZ),
+            el: new PlaneContext(canvas, this.ctx, BB_CONSTANTS.COLOR_EL),
+        };
 
-        /** @type {"idle"|"calibrating"|"tracing"} Current interaction mode. */
-        this.mode = "idle";
+        /** @type {"az"|"el"} Currently visible plane. */
+        this.activePlane = "az";
 
         this._bindEvents();
+    }
+
+    // -----------------------------------------------------------------------
+    // Public API
+    // -----------------------------------------------------------------------
+
+    /**
+     * Switch the active plane (called by the tab bar in init script).
+     * Redraws the canvas with the newly active plane's image + trace.
+     * @param {"az"|"el"} plane
+     */
+    setActivePlane(plane) {
+        if (plane !== "az" && plane !== "el") return;
+        this.activePlane = plane;
+        const ctx = this.planes[plane];
+
+        if (ctx.imageLoader.hasImage) {
+            this.ui.dropZone.classList.add("hidden");
+            ctx.redrawAll();
+        } else {
+            this.ui.dropZone.classList.remove("hidden");
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        }
+
+        this._updateModeIndicator();
+    }
+
+    /**
+     * Retrieve saved azimuth + elevation data for the backend.
+     * @returns {{ azimuth: [number,number][], elevation: [number,number][] }}
+     * @throws {Error} If one or both planes are not saved.
+     */
+    getData() {
+        const { az, el } = this.planes;
+        if (!az.isSaved || !el.isSaved) {
+            throw new Error("Save both Azimuth and Elevation planes before generating.");
+        }
+        return { azimuth: az.savedData, elevation: el.savedData };
     }
 
     // -----------------------------------------------------------------------
@@ -488,15 +579,17 @@ class Workbench {
 
     /** Bind all canvas and button event listeners. @private */
     _bindEvents() {
-        const { fileInput, btnSaveAz, btnSaveEl, btnUndo, btnClearTrace,
-            minGainInput } = this.ui;
+        const ui = this.ui;
 
-        // File input
-        fileInput.addEventListener("change", (e) => {
-            if (e.target.files?.[0]) this._handleFileLoad(e.target.files[0]);
+        // Per-plane file inputs
+        ui.fileInputAz.addEventListener("change", (e) => {
+            if (e.target.files?.[0]) this._handleFileLoad(e.target.files[0], "az");
+        });
+        ui.fileInputEl.addEventListener("change", (e) => {
+            if (e.target.files?.[0]) this._handleFileLoad(e.target.files[0], "el");
         });
 
-        // Drag-and-drop on canvas wrapper
+        // Drag-and-drop on canvas wrapper (loads into active plane)
         this.canvas.parentElement.addEventListener("dragover", (e) => {
             e.preventDefault();
             e.dataTransfer.dropEffect = "copy";
@@ -504,7 +597,7 @@ class Workbench {
         this.canvas.parentElement.addEventListener("drop", (e) => {
             e.preventDefault();
             const file = e.dataTransfer.files?.[0];
-            if (file) this._handleFileLoad(file);
+            if (file) this._handleFileLoad(file, this.activePlane);
         });
 
         // Canvas click
@@ -512,17 +605,22 @@ class Workbench {
             this._handleCanvasClick(getCanvasMousePos(this.canvas, e));
         });
 
-        // Buttons
-        btnSaveAz.addEventListener("click", () => this._savePlane("az"));
-        btnSaveEl.addEventListener("click", () => this._savePlane("el"));
-        btnUndo.addEventListener("click", () => this._undoLastPoint());
-        btnClearTrace.addEventListener("click", () => this._clearCurrentTrace());
+        // Save / undo / clear buttons – azimuth
+        ui.btnSaveAz.addEventListener("click", () => this._savePlane("az"));
+        ui.btnUndoAz.addEventListener("click", () => this._undoLastPoint("az"));
+        ui.btnClearAz.addEventListener("click", () => this._clearTrace("az"));
 
-        // Min gain field
-        minGainInput.addEventListener("change", (e) => {
+        // Save / undo / clear buttons – elevation
+        ui.btnSaveEl.addEventListener("click", () => this._savePlane("el"));
+        ui.btnUndoEl.addEventListener("click", () => this._undoLastPoint("el"));
+        ui.btnClearEl.addEventListener("click", () => this._clearTrace("el"));
+
+        // Min gain field — applies to both planes
+        ui.minGainInput.addEventListener("change", (e) => {
             const val = parseFloat(e.target.value);
             if (!isNaN(val) && val < 0) {
-                this.calibration.minGainDB = val;
+                this.planes.az.calibration.minGainDB = val;
+                this.planes.el.calibration.minGainDB = val;
             }
         });
     }
@@ -532,152 +630,132 @@ class Workbench {
     // -----------------------------------------------------------------------
 
     /**
-     * Load a new image and reset the workbench state.
-     * @param {File} file
+     * Load a new image into the specified plane context.
+     * @param {File}      file
+     * @param {"az"|"el"} plane
      * @private
      */
-    async _handleFileLoad(file) {
+    async _handleFileLoad(file, plane) {
+        const ctx = this.planes[plane];
         try {
-            await this.imageLoader.load(file);
-            this._resetWorkbench();
+            // Switch to the plane being loaded so the canvas shows it
+            this.activePlane = plane;
+            await ctx.loadImage(file);
+            ctx.calibration.minGainDB = parseFloat(this.ui.minGainInput.value) || -40;
+
+            // Hide drop-zone, show image
             this.ui.dropZone.classList.add("hidden");
-            this.mode = "calibrating";
+
+            // Update upload label to show filename
+            const nameEl = plane === "az" ? this.ui.uploadTextAz : this.ui.uploadTextEl;
+            nameEl.innerHTML = `<strong>${file.name}</strong><br /><small>Loaded ✓</small>`;
+
+            this._updateCalibrationSteps(plane);
             this._updateModeIndicator();
-            this._updateCalibrationSteps();
-            showToast("Image loaded — click to set the centre point.", "info");
+            showToast(`${plane.toUpperCase()} image loaded — click to set the chart centre.`, "info");
         } catch (err) {
             showToast(`Failed to load image: ${err.message}`, "error");
         }
     }
 
     /**
-     * Route canvas clicks to the calibration or tracing logic.
+     * Route canvas clicks to the active plane's calibration or tracing logic.
      * @param {{x:number, y:number}} pos
      * @private
      */
     _handleCanvasClick(pos) {
-        if (this.mode === "idle") return;
+        const ctx = this.planes[this.activePlane];
+        if (ctx.mode === "idle") return;
 
-        if (this.mode === "calibrating") {
-            this.calibration.registerClick(pos);
+        const result = ctx.handleClick(pos);
 
-            if (this.calibration.isDone) {
-                this.mode = "tracing";
-                showToast("Calibration complete — start clicking to trace.", "success");
-            }
-            this._updateCalibrationSteps();
-
-        } else if (this.mode === "tracing") {
-            this.planeManager.activeTracer.addPoint(pos);
-            this._updatePlaneCounts();
+        if (result === "calibration-done") {
+            showToast("Calibration complete — start clicking to trace the curve.", "success");
         }
 
+        this._updateCalibrationSteps(this.activePlane);
+        this._updatePlaneCounts();
         this._updateModeIndicator();
     }
 
     /**
-     * Save the currently traced plane and switch to the other.
+     * Save the traced data for a specific plane.
      * @param {"az"|"el"} plane
      * @private
      */
     _savePlane(plane) {
-        if (this.mode !== "tracing") {
+        const ctx = this.planes[plane];
+        if (ctx.mode !== "tracing") {
             showToast("Complete calibration before saving.", "warning");
             return;
         }
-
-        this.planeManager.setActivePlane(plane);
-
         try {
-            const { count } = this.planeManager.saveActivePlane();
-            showToast(`${plane.toUpperCase()} saved — ${count} points.`, "success");
-            this._updatePlaneDots();
-            this._updatePlaneCounts();
-
-            // Switch to the other plane automatically
-            const next = plane === "az" ? "el" : "az";
-            this.planeManager.setActivePlane(next);
-            this.planeManager.activeTracer.clear();
-            this._fullRedraw();
+            ctx.save();
+            showToast(
+                `${plane.toUpperCase()} saved — ${ctx.savedData.length} points.`,
+                "success",
+            );
+            this._updateReadinessDots();
         } catch (err) {
             showToast(err.message, "warning");
         }
     }
 
     /**
-     * Undo the last control point of the active trace.
+     * Undo the last traced point for the given plane.
+     * @param {"az"|"el"} plane
      * @private
      */
-    _undoLastPoint() {
-        if (this.mode !== "tracing") return;
-        this.planeManager.activeTracer.undo();
-        this._fullRedraw();
+    _undoLastPoint(plane) {
+        const ctx = this.planes[plane];
+        if (ctx.mode !== "tracing") return;
+        ctx.undo();
+        ctx.redrawAll();
         this._updatePlaneCounts();
     }
 
     /**
-     * Clear all points from the current trace.
+     * Clear all traced points for the given plane.
+     * @param {"az"|"el"} plane
      * @private
      */
-    _clearCurrentTrace() {
-        if (this.mode !== "tracing") return;
-        this.planeManager.activeTracer.clear();
-        this._fullRedraw();
+    _clearTrace(plane) {
+        const ctx = this.planes[plane];
+        if (ctx.mode !== "tracing") return;
+        ctx.clearTrace();
+        ctx.redrawAll();
         this._updatePlaneCounts();
     }
 
     // -----------------------------------------------------------------------
-    // Drawing & UI update helpers
+    // UI update helpers
     // -----------------------------------------------------------------------
-
-    /**
-     * Full canvas redraw: image → calibration marks → all traces.
-     * @private
-     */
-    _fullRedraw() {
-        this.imageLoader.redraw();
-        // Calibration marks are baked into the canvas image; redraw traces
-        this.azTracer.redraw();
-        this.elTracer.redraw();
-    }
-
-    /**
-     * Reset all workbench state (keeps calibration from scratch).
-     * @private
-     */
-    _resetWorkbench() {
-        this.calibration._reset();
-        this.azTracer.clear();
-        this.elTracer.clear();
-        this.planeManager.azimuthData = null;
-        this.planeManager.elevationData = null;
-        this.planeManager.activePlane = "az";
-        this._updatePlaneDots();
-        this._updatePlaneCounts();
-        this._updateCalibrationSteps();
-    }
 
     /** Update the mode badge in the workbench toolbar. @private */
     _updateModeIndicator() {
         const el = this.ui.modeIndicator;
         el.className = "mode-indicator";
+        const ctx = this.planes[this.activePlane];
+        const label = this.activePlane === "az" ? "AZIMUTH" : "ELEVATION";
 
-        if (this.mode === "calibrating") {
-            el.textContent = `Calibration (step ${this.calibration.step}/3)`;
+        if (ctx.mode === "calibrating") {
+            el.textContent = `Calibrating ${label} — step ${ctx.calibration.step} / 3`;
             el.classList.add("mode--calibrate");
-        } else if (this.mode === "tracing") {
-            const plane = this.planeManager.activePlane.toUpperCase();
-            el.textContent = `Tracing — ${plane}`;
+        } else if (ctx.mode === "tracing") {
+            el.textContent = `Tracing — ${label}`;
             el.classList.add("mode--trace");
         } else {
-            el.textContent = "Idle — upload an image";
+            el.textContent = "Idle — load a chart in one of the plane tabs";
         }
     }
 
-    /** Highlight the current calibration step in the sidebar. @private */
-    _updateCalibrationSteps() {
-        const steps = this.ui.calStepEls;
-        const cur = this.calibration.step;
+    /**
+     * Highlight the current calibration step for the given plane. @private
+     * @param {"az"|"el"} plane
+     */
+    _updateCalibrationSteps(plane) {
+        const steps = this.ui.calStepEls[plane];
+        const cur = this.planes[plane].calibration.step;
         steps.forEach((el, idx) => {
             el.classList.remove("active", "done");
             if (idx + 1 < cur) el.classList.add("done");
@@ -685,38 +763,25 @@ class Workbench {
         });
     }
 
-    /** Update the control-point count labels in the sidebar. @private */
+    /** Update the point-count labels in the sidebar. @private */
     _updatePlaneCounts() {
-        this.ui.planeAzCount.textContent = `${this.planeManager.azTracer.count} pts`;
-        this.ui.planeElCount.textContent = `${this.planeManager.elTracer.count} pts`;
+        this.ui.countAz.textContent = `${this.planes.az.tracer.count} pts traced`;
+        this.ui.countEl.textContent = `${this.planes.el.tracer.count} pts traced`;
     }
-
-    /** Update the status dots for each plane. @private */
-    _updatePlaneDots() {
-        const azSaved = this.planeManager.azimuthData !== null;
-        const elSaved = this.planeManager.elevationData !== null;
-        this.ui.planeAzDot.classList.toggle("active", azSaved);
-        this.ui.planeElDot.classList.toggle("active", elSaved);
-        this.ui.btnSaveAz.classList.toggle("btn--success", azSaved);
-        this.ui.btnSaveEl.classList.toggle("btn--success", elSaved);
-    }
-
-    // -----------------------------------------------------------------------
-    // Public data accessor
-    // -----------------------------------------------------------------------
 
     /**
-     * Retrieve the saved azimuth and elevation arrays for the backend.
-     * @returns {{ azimuth: [number,number][], elevation: [number,number][] }}
-     * @throws {Error} If one or both planes are not yet saved.
+     * Update the tab + readiness dot indicators to reflect saved state. @private
      */
-    getData() {
-        if (!this.planeManager.isComplete) {
-            throw new Error("Save both Azimuth and Elevation before generating.");
-        }
-        return {
-            azimuth: this.planeManager.azimuthData,
-            elevation: this.planeManager.elevationData,
-        };
+    _updateReadinessDots() {
+        const azSaved = this.planes.az.isSaved;
+        const elSaved = this.planes.el.isSaved;
+
+        this.ui.dotAz.classList.toggle("active", azSaved);
+        this.ui.dotEl.classList.toggle("active", elSaved);
+        this.ui.rdotAz.classList.toggle("active", azSaved);
+        this.ui.rdotEl.classList.toggle("active", elSaved);
+
+        this.ui.btnSaveAz.classList.toggle("btn--success", azSaved);
+        this.ui.btnSaveEl.classList.toggle("btn--success", elSaved);
     }
 }
