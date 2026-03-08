@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <style>
+    .ligne { 
+      fill: none; 
+      stroke: #1A1A1A; 
+      stroke-width: 8; 
+      stroke-linecap: round; 
+      stroke-linejoin: round; 
+    }
+  </style>
+
+  <ellipse cx="100" cy="160" rx="70" ry="20" class="ligne" />
+
+  <path d="M 100 160 C 10 150 30 30 100 30 C 170 30 190 150 100 160 Z" class="ligne" />
+
+  <ellipse cx="100" cy="95" rx="61" ry="18" class="ligne" />
+
+  <line x1="100" y1="180" x2="100" y2="20" class="ligne" stroke-dasharray="10 10" />
+
+  <circle cx="100" cy="160" r="8" fill="#1A1A1A" />
+</svg>

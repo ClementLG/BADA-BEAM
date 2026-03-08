@@ -21,7 +21,8 @@ License: GNU GPLv3
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description"
         content="Bada-Beam — Transform 2D antenna polar charts into interactive 3D radiation patterns." />
-    <title>Bada-Beam 📡 — Antenna Pattern Visualiser</title>
+    <title>bada-beam</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/logo.svg') }}" />
 
     <!-- ── Fonts & Styles ───────────────────────────────────────────────── -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
@@ -191,7 +192,7 @@ License: GNU GPLv3
                             <div class="cal-step cal-step--has-tip" id="el-cal-step-3"
                                 data-tooltip="Click the direction of the main lobe (strongest gain). This sets the 0° angle reference for your measurements.">
                                 <div class="cal-step__num">3</div>
-                                <span>Click the <strong>main lobe</strong> direction <span
+                                <span>Click the <strong>0 degree</strong> direction <span
                                         class="tip-icon">?</span></span>
                             </div>
                         </div>
