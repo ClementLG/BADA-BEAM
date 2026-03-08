@@ -7,7 +7,7 @@ intuitive heatmap (blue → cyan → green → yellow → red).
 
 Author : Clement
 Date   : 2026-03-08
-License: MIT
+License: GNU GPLv3
 ================================================================================
 """
 

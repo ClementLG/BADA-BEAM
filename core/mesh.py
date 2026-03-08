@@ -16,7 +16,7 @@ to be serialised to JSON and consumed by the Three.js frontend.
 
 Author : Clement
 Date   : 2026-03-08
-License: MIT
+License: GNU GPLv3
 ================================================================================
 """
 

@@ -11,7 +11,7 @@ Exposes two routes:
 
 Author : Clement
 Date   : 2026-03-08
-License: MIT
+License: GNU GPLv3
 ================================================================================
 """
 

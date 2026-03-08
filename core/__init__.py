@@ -7,7 +7,7 @@ Importing from `core` exposes the single entry-point used by the Flask routes.
 
 Author : Clement
 Date   : 2026-03-08
-License: MIT
+License: GNU GPLv3
 ================================================================================
 """
 

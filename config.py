@@ -7,7 +7,7 @@ All tuneable parameters live here so that app.py and the engine stay clean.
 
 Author : Clement
 Date   : 2026-03-08
-License: MIT
+License: GNU GPLv3
 ================================================================================
 """
 
