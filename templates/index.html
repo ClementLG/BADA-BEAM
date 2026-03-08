@@ -28,7 +28,7 @@ License: GNU GPLv3
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
 
     <!-- ── Three.js (ES Modules) ────────────────────────────────────────── -->
-    <script type="importmap">
+    <script type="importmap" nonce="{{ csp_nonce() }}">
         {
             "imports": {
                 "three": "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.js",
@@ -347,7 +347,7 @@ License: GNU GPLv3
     <script src="{{ url_for('static', filename='js/workbench.js') }}"></script>
     <script type="module" src="{{ url_for('static', filename='js/viewer3d.js') }}"></script>
 
-    <script type="module">
+    <script type="module" nonce="{{ csp_nonce() }}">
         /**
          * =============================================================================
          * Inline initialisation — Bada-Beam

@@ -17,6 +17,9 @@ License: GNU GPLv3
 
 from flask import Flask, render_template, request, jsonify, abort
 from flask_talisman import Talisman
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 import config
 from core import build_mesh
@@ -34,15 +37,21 @@ def create_app() -> Flask:
     """
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH
+    app.config["SECRET_KEY"] = config.SECRET_KEY
+    app.config["SESSION_COOKIE_SECURE"] = config.FLASK_ENV == "production"
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
     # -----------------------------------------------------------------------
     # Security
     # -----------------------------------------------------------------------
+    # Trust reverse proxy headers (IP, Proto, Host, Prefix)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
     csp = {
         'default-src': '\'self\'',
         'script-src': [
             '\'self\'',
-            '\'unsafe-inline\'',
             'https://cdn.jsdelivr.net'
         ],
         'style-src': [
@@ -55,7 +64,15 @@ def create_app() -> Flask:
             'blob:'
         ]
     }
-    Talisman(app, content_security_policy=csp, force_https=False)
+    Talisman(app, content_security_policy=csp, content_security_policy_nonce_in=['script-src'], force_https=False)
+
+    # Initialize rate limiter
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=[config.RATE_LIMIT_DEFAULT],
+        storage_uri="memory://"
+    )
 
     # -----------------------------------------------------------------------
     # Routes
@@ -80,6 +97,7 @@ def create_app() -> Flask:
         return render_template("about.html")
 
     @app.post("/generate")
+    @limiter.limit(config.RATE_LIMIT_GENERATE)
     def generate():
         """Generate a 3-D mesh from 2-D azimuth and elevation gain data.
 
@@ -135,6 +153,11 @@ def create_app() -> Flask:
     def bad_request(exc):
         """Handle 400 Bad Request errors."""
         return jsonify({"error": "Bad request."}), 400
+
+    @app.errorhandler(429)
+    def ratelimit_handler(exc):
+        """Handle 429 Too Many Requests (Rate Limiting)."""
+        return jsonify({"error": f"Rate limit exceeded: {exc.description}"}), 429
 
     @app.errorhandler(413)
     def too_large(exc):

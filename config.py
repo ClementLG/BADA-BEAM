@@ -31,12 +31,25 @@ _default_host = "0.0.0.0" if FLASK_ENV == "production" else "127.0.0.1"
 HOST: str = os.getenv("HOST", _default_host)
 PORT: int = int(os.getenv("PORT", "5000"))
 
+# ---------------------------------------------------------------------------
+# Security settings
+# ---------------------------------------------------------------------------
+# Used for securely signing the session cookie.
+SECRET_KEY: str = os.getenv("SECRET_KEY", os.urandom(32).hex())
+
+
 
 # ---------------------------------------------------------------------------
 # Upload settings
 # ---------------------------------------------------------------------------
-MAX_CONTENT_LENGTH: int = 16 * 1024 * 1024  # 16 MB max upload size
+MAX_CONTENT_LENGTH: int = 1 * 1024 * 1024  # 1 MB max upload size
 ALLOWED_EXTENSIONS: set = {"png", "jpg", "jpeg", "bmp", "webp"}
+
+# ---------------------------------------------------------------------------
+# Rate Limiting
+# ---------------------------------------------------------------------------
+RATE_LIMIT_DEFAULT: str = os.getenv("RATE_LIMIT_DEFAULT", "100 per minute")
+RATE_LIMIT_GENERATE: str = os.getenv("RATE_LIMIT_GENERATE", "10 per minute")
 
 # ---------------------------------------------------------------------------
 # 3-D mesh generation
