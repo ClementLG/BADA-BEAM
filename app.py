@@ -47,6 +47,15 @@ def create_app() -> Flask:
         """
         return render_template("index.html")
 
+    @app.get("/about")
+    def about():
+        """Serve the about page.
+
+        Returns:
+            Rendered HTML template.
+        """
+        return render_template("about.html")
+
     @app.post("/generate")
     def generate():
         """Generate a 3-D mesh from 2-D azimuth and elevation gain data.

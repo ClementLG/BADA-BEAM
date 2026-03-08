@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<!--
+================================================================================
+about.html — Bada-Beam
+================================================================================
+About page outlining the project goals and limitation of liability.
+
+Author : Clement
+Date   : 2026-03-08
+License: MIT
+================================================================================
+-->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description"
+        content="About Bada-Beam — Antenna Pattern Visualiser limitation of liability and project description." />
+    <title>About Bada-Beam 📡</title>
+
+    <!-- ── Fonts & Styles ───────────────────────────────────────────────── -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+
+    <style>
+        .about-container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 30px;
+            background: var(--bg-card, #1e1e1e);
+            border-radius: 8px;
+            border: 1px solid var(--color-border, #333);
+            color: var(--color-text, #eee);
+            line-height: 1.6;
+        }
+
+        .about-container h1 {
+            color: var(--color-accent, #3b82f6);
+            margin-bottom: 24px;
+            font-size: 2em;
+        }
+
+        .about-container h2 {
+            margin-top: 36px;
+            margin-bottom: 12px;
+            border-bottom: 1px solid var(--color-border, #333);
+            padding-bottom: 8px;
+            font-size: 1.5em;
+        }
+
+        .about-container p {
+            margin-bottom: 16px;
+        }
+
+        .about-container ul {
+            margin-bottom: 16px;
+            padding-left: 24px;
+        }
+
+        .about-container li {
+            margin-bottom: 8px;
+        }
+
+        .about-container a {
+            color: var(--color-accent, #3b82f6);
+            text-decoration: none;
+        }
+
+        .about-container a:hover {
+            text-decoration: underline;
+        }
+
+        .liability-section {
+            margin-top: 48px;
+            padding: 20px;
+            background: rgba(255, 68, 68, 0.1);
+            border-left: 4px solid #ff4444;
+            border-radius: 4px;
+        }
+
+        .liability-section h2 {
+            margin-top: 0;
+            color: #ff6666;
+            border-bottom: none;
+            padding-bottom: 0;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ============================================================
+     Top navigation bar
+     ============================================================ -->
+    <header class="app-header">
+        <a href="/" class="app-header__logo" style="text-decoration:none; color:inherit;">
+            <span class="icon">📡</span>
+            Bada-Beam
+        </a>
+        <span class="app-header__tagline">About the Project</span>
+        <div style="display:flex;gap:8px;">
+            <a href="/" class="btn btn--secondary"
+                style="text-decoration:none; color:inherit; display:inline-flex; align-items:center; justify-content:center;">
+                ⬅️ Back to App
+            </a>
+            <a href="https://github.com/ClementLG" target="_blank" class="btn btn--secondary"
+                title="ClementLG GitHub Repository"
+                style="text-decoration:none; color:inherit; display:inline-flex; align-items:center; justify-content:center; gap:6px;">
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path
+                        d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22">
+                    </path>
+                </svg> GitHub
+            </a>
+        </div>
+    </header>
+
+    <!-- ============================================================
+     Main workspace / About Content
+     ============================================================ -->
+    <main class="workspace" style="display:block; overflow-y:auto; padding-bottom: 40px;">
+        <div class="about-container card">
+            <h1>About Bada-Beam</h1>
+            <p><strong>Bada-Beam</strong> is an interactive web application designed to transform 2D antenna polar
+                charts into interactive 3D radiation patterns.</p>
+
+            <h2>How It Works</h2>
+            <p>Antenna manufacturers often provide radiation patterns in 2D polar charts representing the Azimuth
+                (Horizontal) and Elevation (Vertical) planes. Bada-Beam allows you to:</p>
+            <ul>
+                <li><strong>Load</strong> your 2D polar charts directly into the browser.</li>
+                <li><strong>Calibrate</strong> the charts by setting the center, the outer ring (0 dB reference), and
+                    the main lobe direction.</li>
+                <li><strong>Trace</strong> the radiation pattern manually or using our Auto-Trace color detection tool.
+                </li>
+                <li><strong>Generate</strong> a comprehensive 3D volume representing the antenna's radiation
+                    characteristics.</li>
+                <li><strong>Export</strong> the resulting 3D mesh as an OBJ file or take screenshots for your reports.
+                </li>
+            </ul>
+
+            <h2>Project Goals</h2>
+            <p>The primary goal of this tool is to provide engineers, radio amateurs, and students with an intuitive and
+                fast way to visualize antenna directivity in three dimensions without needing complex electromagnetic
+                simulation software.</p>
+
+            <h2>Open Source</h2>
+            <p>Bada-Beam is an open-source project. You can find the source code, contribute, or report issues on my
+                GitHub profile:</p>
+            <p style="margin-top:16px;">
+                <a href="https://github.com/ClementLG" target="_blank" class="btn btn--secondary"
+                    style="display:inline-flex; align-items:center; gap:8px; padding: 12px 24px;">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                            d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22">
+                        </path>
+                    </svg>
+                    Visit @ClementLG on GitHub
+                </a>
+            </p>
+
+            <div class="liability-section">
+                <h2>Limitation of Liability</h2>
+                <p>This software is provided "as is", without warranty of any kind, express or implied, including but
+                    not limited to the warranties of merchantability, fitness for a particular purpose, and
+                    non-infringement.</p>
+                <p>The 3D radiation patterns generated by this application are mathematical approximations derived from
+                    2D data and should be used for <strong>Visualization and Educational Purposes only</strong>. They
+                    may not accurately represent the true physical characteristics of the antenna in real-world
+                    scenarios.</p>
+                <p>In no event shall the authors or copyright holders be liable for any claim, damages, or other
+                    liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in
+                    connection with the software or the use or other dealings in the software.</p>
+            </div>
+        </div>
+    </main>
+
+</body>
+
+</html>
