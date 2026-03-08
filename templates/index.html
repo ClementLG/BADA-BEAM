@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<!--
+================================================================================
+index.html — Bada-Beam
+================================================================================
+Single-page application shell for the Bada-Beam antenna pattern visualiser.
+Layout: sidebar (controls) | 2-D Workbench canvas | 3-D Viewer canvas.
+
+Author : Clement
+Date   : 2026-03-08
+License: MIT
+================================================================================
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description"
+          content="Bada-Beam — Transform 2D antenna polar charts into interactive 3D radiation patterns." />
+    <title>Bada-Beam 📡 — Antenna Pattern Visualiser</title>
+
+    <!-- ── Fonts & Styles ───────────────────────────────────────────────── -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+
+    <!-- ── Three.js (CDN) ───────────────────────────────────────────────── -->
+    <!-- Core library -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.min.js"></script>
+    <!-- OrbitControls (attached to THREE namespace via import map shim) -->
+    <script>
+        // Shim: expose OrbitControls on the THREE namespace after Three.js loads,
+        // using the CDN UMD build so we stay compatible with the global THREE object.
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.162.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+<!-- ============================================================
+     Top navigation bar
+     ============================================================ -->
+<header class="app-header">
+    <div class="app-header__logo">
+        <span class="icon">📡</span>
+        Bada-Beam
+    </div>
+    <span class="app-header__tagline">2D ∙ Polar Charts → 3D ∙ Radiation Volumes</span>
+    <div style="display:flex;gap:8px;">
+        <button class="btn btn--secondary"
+                id="btn-export-png"
+                title="Export PNG screenshot">
+            🖼 PNG
+        </button>
+        <button class="btn btn--secondary"
+                id="btn-export-obj"
+                title="Export OBJ 3D model">
+            📦 OBJ
+        </button>
+    </div>
+</header>
+
+<!-- ============================================================
+     Main workspace (sidebar | workbench | viewer)
+     ============================================================ -->
+<main class="workspace">
+
+    <!-- ── Sidebar ──────────────────────────────────────────────────────── -->
+    <aside class="sidebar" aria-label="Controls">
+
+        <!-- Upload -->
+        <div class="card">
+            <div class="card__header">📂 1 · Import Image</div>
+            <div class="card__body">
+                <label class="upload-area" for="file-input" title="Click or drag an image">
+                    <input type="file" id="file-input"
+                           accept=".png,.jpg,.jpeg,.bmp,.webp" />
+                    <span class="upload-area__icon">🖼</span>
+                    <span class="upload-area__text">
+                        Click or drag a polar chart<br />
+                        <small>PNG · JPG · BMP · WebP</small>
+                    </span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Calibration -->
+        <div class="card">
+            <div class="card__header">⚙ 2 · Calibrate Grid</div>
+            <div class="card__body">
+                <div class="cal-steps" id="cal-steps">
+                    <div class="cal-step" id="cal-step-1">
+                        <div class="cal-step__num">1</div>
+                        <span>Click the <strong>centre</strong> of the chart</span>
+                    </div>
+                    <div class="cal-step" id="cal-step-2">
+                        <div class="cal-step__num">2</div>
+                        <span>Click the <strong>0 dB outer ring</strong></span>
+                    </div>
+                    <div class="cal-step" id="cal-step-3">
+                        <div class="cal-step__num">3</div>
+                        <span>Click the <strong>0° direction</strong></span>
+                    </div>
+                </div>
+
+                <div style="margin-top:8px;">
+                    <label for="min-gain-input">Minimum gain (dB)</label>
+                    <input type="number" id="min-gain-input"
+                           value="-40" min="-100" max="-5" step="5" />
+                </div>
+            </div>
+        </div>
+
+        <!-- Trace planes -->
+        <div class="card">
+            <div class="card__header">✏ 3 · Trace Planes</div>
+            <div class="card__body">
+
+                <!-- Plane status indicators -->
+                <div class="plane-status">
+                    <div class="status-dot" id="dot-az"></div>
+                    <span class="plane-status__label">Azimuth (H)</span>
+                    <span class="plane-status__count" id="count-az">0 pts</span>
+                </div>
+                <div class="plane-status">
+                    <div class="status-dot" id="dot-el"></div>
+                    <span class="plane-status__label">Elevation (V)</span>
+                    <span class="plane-status__count" id="count-el">0 pts</span>
+                </div>
+
+                <!-- Plane selector -->
+                <div style="margin-top:4px;">
+                    <label for="plane-select">Active plane</label>
+                    <select id="plane-select">
+                        <option value="az">Azimuth</option>
+                        <option value="el">Elevation</option>
+                    </select>
+                </div>
+
+                <!-- Save buttons -->
+                <div class="btn-row" style="margin-top:4px;">
+                    <button class="btn btn--secondary" id="btn-save-az">
+                        💾 Save Az
+                    </button>
+                    <button class="btn btn--secondary" id="btn-save-el">
+                        💾 Save El
+                    </button>
+                </div>
+
+                <!-- Undo / Clear -->
+                <div class="btn-row">
+                    <button class="btn btn--danger" id="btn-undo">↩ Undo</button>
+                    <button class="btn btn--danger" id="btn-clear">🗑 Clear</button>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Generate -->
+        <div class="card">
+            <div class="card__header">🚀 4 · Generate</div>
+            <div class="card__body">
+                <button class="btn btn--generate" id="btn-generate">
+                    ⚡ Bada-Beam!
+                </button>
+            </div>
+        </div>
+
+        <!-- Viewer options -->
+        <div class="card">
+            <div class="card__header">🔧 Viewer Options</div>
+            <div class="card__body">
+                <div class="toggle-row">
+                    <label for="chk-axes">Show XYZ axes</label>
+                    <input type="checkbox" id="chk-axes" checked />
+                </div>
+                <button class="btn btn--secondary" id="btn-reset-camera"
+                        style="margin-top:4px;width:100%;">
+                    🎯 Reset Camera
+                </button>
+            </div>
+        </div>
+
+    </aside>
+
+    <!-- ── 2-D Workbench ─────────────────────────────────────────────────── -->
+    <section class="panel-workbench" aria-label="2D Workbench">
+
+        <div class="panel-header">
+            <div class="panel-header__title">
+                🖊 2-D Workbench
+            </div>
+            <span class="mode-indicator" id="mode-indicator">Idle — upload an image</span>
+        </div>
+
+        <div class="workbench-toolbar">
+            <span style="font-size:11px;color:var(--color-text-muted);">
+                Calibrate → Trace → Save each plane → Generate
+            </span>
+        </div>
+
+        <div class="canvas-container" id="workbench-container">
+            <!-- Drop-zone shown before image is loaded -->
+            <div class="drop-zone" id="drop-zone">
+                <span class="drop-zone__icon">📡</span>
+                <div class="drop-zone__text">
+                    Drop a polar chart image here<br />
+                    or use the upload button in the sidebar
+                </div>
+            </div>
+            <canvas id="workbench-canvas"></canvas>
+        </div>
+
+    </section>
+
+    <!-- ── 3-D Viewer ─────────────────────────────────────────────────────── -->
+    <section class="panel-viewer" aria-label="3D Viewer">
+
+        <div class="panel-header">
+            <div class="panel-header__title">
+                🌐 3-D Radiation Pattern
+            </div>
+            <span style="font-size:11px;color:var(--color-text-muted);">
+                Left-drag: rotate &nbsp;·&nbsp; Scroll: zoom &nbsp;·&nbsp; Right-drag: pan
+            </span>
+        </div>
+
+        <div class="canvas-container" id="viewer-container">
+            <!-- Placeholder shown before any mesh is generated -->
+            <div class="viewer-placeholder" id="viewer-placeholder">
+                <span class="viewer-placeholder__icon">🌐</span>
+                <p style="font-size:13px;color:var(--color-text-muted);max-width:260px;line-height:1.8;">
+                    Trace both Azimuth and Elevation planes,<br />
+                    then click <strong style="color:var(--color-accent);">⚡ Bada-Beam!</strong>
+                </p>
+            </div>
+
+            <!-- Spinner shown while the backend processes the request -->
+            <div class="spinner-overlay" id="spinner">
+                <div class="spinner"></div>
+                <span class="spinner-label">Generating 3-D mesh…</span>
+            </div>
+
+            <canvas id="viewer-canvas"></canvas>
+        </div>
+
+    </section>
+
+</main>
+
+<!-- ── Toast container ──────────────────────────────────────────────────── -->
+<div id="toast-container" aria-live="polite"></div>
+
+<!-- ============================================================
+     Scripts — order matters: constants → utils → workbench → viewer3d → init
+     ============================================================ -->
+<script src="{{ url_for('static', filename='js/constants.js') }}"></script>
+<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+<script src="{{ url_for('static', filename='js/workbench.js') }}"></script>
+<script src="{{ url_for('static', filename='js/viewer3d.js') }}"></script>
+
+<script>
+/**
+ * =============================================================================
+ * Inline initialisation — Bada-Beam
+ * =============================================================================
+ * Bootstraps the Workbench and Viewer3D instances once the DOM is ready,
+ * and wires the cross-component interactions (plane selector, generate button,
+ * export buttons, viewer options).
+ *
+ * This block is intentionally kept as thin as possible — all logic lives in
+ * the dedicated JS modules above.
+ * =============================================================================
+ */
+(function initApp() {
+    "use strict";
+
+    // ── Canvas sizing ──────────────────────────────────────────────────────
+    /**
+     * Fit a canvas to its parent container (CSS pixels, not device pixels).
+     * @param {HTMLCanvasElement} canvas
+     */
+    function fitCanvasToParent(canvas) {
+        const parent = canvas.parentElement;
+        canvas.width  = parent.clientWidth;
+        canvas.height = parent.clientHeight;
+    }
+
+    // Size both canvases before creating the instances
+    const workbenchCanvas = qs("#workbench-canvas");
+    const viewerCanvas    = qs("#viewer-canvas");
+    fitCanvasToParent(workbenchCanvas);
+    fitCanvasToParent(viewerCanvas);
+
+    // Resize workbench canvas on window resize (viewer handles its own)
+    window.addEventListener("resize", () => fitCanvasToParent(workbenchCanvas));
+
+    // ── Workbench ──────────────────────────────────────────────────────────
+    const workbench = new Workbench(workbenchCanvas, {
+        btnSaveAz:     qs("#btn-save-az"),
+        btnSaveEl:     qs("#btn-save-el"),
+        btnUndo:       qs("#btn-undo"),
+        btnClearTrace: qs("#btn-clear"),
+        fileInput:     qs("#file-input"),
+        dropZone:      qs("#drop-zone"),
+        modeIndicator: qs("#mode-indicator"),
+        calStepEls:    document.querySelectorAll(".cal-step"),
+        planeAzCount:  qs("#count-az"),
+        planeElCount:  qs("#count-el"),
+        planeAzDot:    qs("#dot-az"),
+        planeElDot:    qs("#dot-el"),
+        minGainInput:  qs("#min-gain-input"),
+    });
+
+    // Plane selector drives the workbench active plane
+    qs("#plane-select").addEventListener("change", (e) => {
+        if (workbench.mode === "tracing") {
+            workbench.planeManager.setActivePlane(e.target.value);
+        }
+    });
+
+    // ── Viewer 3D ──────────────────────────────────────────────────────────
+    const viewer = new Viewer3D(
+        viewerCanvas,
+        qs("#viewer-placeholder"),
+        qs("#spinner"),
+    );
+
+    // ── Generate button ────────────────────────────────────────────────────
+    qs("#btn-generate").addEventListener("click", async () => {
+        let data;
+        try {
+            data = workbench.getData();
+        } catch (err) {
+            showToast(err.message, "warning");
+            return;
+        }
+        await viewer.generate(data.azimuth, data.elevation);
+    });
+
+    // ── Export buttons ─────────────────────────────────────────────────────
+    qs("#btn-export-png").addEventListener("click", () => viewer.exportPNG());
+    qs("#btn-export-obj").addEventListener("click", () => viewer.exportOBJ());
+
+    // ── Viewer options ─────────────────────────────────────────────────────
+    qs("#chk-axes").addEventListener("change", (e) => {
+        viewer.axesManager.setVisible(e.target.checked);
+    });
+
+    qs("#btn-reset-camera").addEventListener("click", () => {
+        viewer.sceneManager.resetCamera();
+    });
+
+})();
+</script>
+
+</body>
+</html>
