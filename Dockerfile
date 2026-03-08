@@ -23,8 +23,7 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 # Expose port 5000 for the app
-EXPOSE 5000
+EXPOSE 5010
 
 # Run the application using Gunicorn for a production-ready, multi-user setup
-CMD sh -c "gunicorn -w 4 -b 0.0.0.0:${PORT:-5000} 'app:create_app()'"
-
+CMD sh -c "gunicorn -w 4 -b 0.0.0.0:${PORT:-5010} 'app:create_app()'"
