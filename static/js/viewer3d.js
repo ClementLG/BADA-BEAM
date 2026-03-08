@@ -27,6 +27,9 @@
 
 "use strict";
 
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
 /* =============================================================================
  * SceneManager
  * ===========================================================================
@@ -68,7 +71,7 @@ class SceneManager {
         );
 
         // Controls
-        this.controls = new THREE.OrbitControls(this.camera, canvas);
+        this.controls = new OrbitControls(this.camera, canvas);
         this.controls.enableDamping = true;
         this.controls.dampingFactor = 0.08;
 
@@ -527,3 +530,6 @@ class Viewer3D {
         this.spinner.classList.toggle("visible", visible);
     }
 }
+
+// Expose to window since this script is now a module
+window.Viewer3D = Viewer3D;
