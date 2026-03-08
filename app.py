@@ -16,6 +16,7 @@ License: GNU GPLv3
 """
 
 from flask import Flask, render_template, request, jsonify, abort
+from flask_talisman import Talisman
 
 import config
 from core import build_mesh
@@ -33,6 +34,28 @@ def create_app() -> Flask:
     """
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH
+
+    # -----------------------------------------------------------------------
+    # Security
+    # -----------------------------------------------------------------------
+    csp = {
+        'default-src': '\'self\'',
+        'script-src': [
+            '\'self\'',
+            '\'unsafe-inline\'',
+            'https://cdn.jsdelivr.net'
+        ],
+        'style-src': [
+            '\'self\'',
+            '\'unsafe-inline\''
+        ],
+        'img-src': [
+            '\'self\'',
+            'data:',
+            'blob:'
+        ]
+    }
+    Talisman(app, content_security_policy=csp, force_https=False)
 
     # -----------------------------------------------------------------------
     # Routes
@@ -87,11 +110,11 @@ def create_app() -> Flask:
         if not elevation or not isinstance(elevation, list):
             return jsonify({"error": "'elevation' must be a non-empty list."}), 400
 
-        if len(azimuth) < 3:
-            return jsonify({"error": "Azimuth must have at least 3 points."}), 400
+        if not (3 <= len(azimuth) <= 1000):
+            return jsonify({"error": "Azimuth must have between 3 and 1000 points."}), 400
 
-        if len(elevation) < 3:
-            return jsonify({"error": "Elevation must have at least 3 points."}), 400
+        if not (3 <= len(elevation) <= 1000):
+            return jsonify({"error": "Elevation must have between 3 and 1000 points."}), 400
 
         # --- Mesh generation ------------------------------------------------
         try:

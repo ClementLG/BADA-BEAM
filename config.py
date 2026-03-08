@@ -11,12 +11,26 @@ License: GNU GPLv3
 ================================================================================
 """
 
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file if present
+load_dotenv()
+
 # ---------------------------------------------------------------------------
 # Server settings
 # ---------------------------------------------------------------------------
-DEBUG: bool = True          # Set to False in production
-HOST: str = "127.0.0.1"    # Bind address
-PORT: int = 5000            # Listening port
+FLASK_ENV: str = os.getenv("FLASK_ENV", "production")
+DEBUG: bool = os.getenv("DEBUG", "false").lower() in ("true", "1", "t")
+
+# Host and Port bindings differ depending on environment
+# - In Prod (Docker), we usually bind to 0.0.0.0
+# - In Dev, we bind to 127.0.0.1
+_default_host = "0.0.0.0" if FLASK_ENV == "production" else "127.0.0.1"
+
+HOST: str = os.getenv("HOST", _default_host)
+PORT: int = int(os.getenv("PORT", "5000"))
+
 
 # ---------------------------------------------------------------------------
 # Upload settings
