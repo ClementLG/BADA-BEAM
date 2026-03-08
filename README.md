@@ -82,7 +82,7 @@ You can deploy BADA-BEAM either via Docker (recommended for environmental consis
    ```
 
 3. **Access the platform:**
-   Navigate to `http://localhost:5000` via your preferred web browser.
+   Navigate to `http://localhost:5010` via your preferred web browser.
 
 ### Local Installation
 
@@ -108,7 +108,7 @@ You can deploy BADA-BEAM either via Docker (recommended for environmental consis
    ```
 
 4. **Access the platform:**
-   Navigate to `http://localhost:5000` via your web browser.
+   Navigate to `http://localhost:5010` via your web browser.
 
 ---
 
